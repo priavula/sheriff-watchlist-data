@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+	<sftp:config name="SFTP_Config" doc:name="SFTP Config" doc:id="22e8433f-2938-4ed7-8bfa-30a8f4f8663c" >
+		<sftp:connection workingDir="${sysc.sftp.sheriffwatchlist.path}" host="${sysc.sftp.sheriffwatchlist.host}" port="${sysc.sftp.sheriffwatchlist.port}" username="${sysc.sftp.sheriffwatchlist.user}" password="#[vars.pswd]" connectionTimeoutUnit="MINUTES" connectionTimeout="1" responseTimeoutUnit="MINUTES">
+			<reconnection >
+				<reconnect />
+			</reconnection>
+		</sftp:connection>
+	</sftp:config>
+	<configuration-properties doc:name="Configuration properties" doc:id="ef58ff51-ee0b-49f6-9007-c1a3854817f0" file="${env}.properties" />
+	<flow name="sherrifwatchlistdataFlow" doc:id="4067e836-8242-4e53-bc75-53fe84372426" >
+		<scheduler doc:name="sherrifwatchlistdata schedular" doc:id="5883efbe-df83-42f2-8017-fd8d725d9300" >
+			<scheduling-strategy >
+				<cron expression="${daily.runnable.cron.expression}" />
+			</scheduling-strategy>
+		</scheduler>
+		<db:select doc:name="Select" doc:id="cae7de55-8fdc-487f-9a28-6b05d3eb2cd1" config-ref="DB2_Config_OTS">
+			<reconnect />
+			<db:sql><![CDATA[SELECT * FROM GAAOWN.GAVPRP1 WHERE NAME = :name]]></db:sql>
+			<db:input-parameters><![CDATA[#[{'name' : 'daily_extract_sheriffwatchlist_runnable'}]]]></db:input-parameters>
+		</db:select>
+		<logger level="INFO" doc:name="Logger" doc:id="bce197c3-d8d8-4b06-8b94-35a8b2f9ecd9" message="Extracted runnable name from DB"/>
+		<ee:transform doc:name="Transform Message" doc:id="c6b6b508-7ef0-47a7-9fd1-6b6ec077ea91">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value='#[payload[0].value]' doc:name="Set Runnable" doc:id="215150bd-b892-469f-b42b-a0f03061600e" variableName="DailySheriffWatchlistExtractIsRunnable"/>
+		<set-variable value="0" doc:name="Set WatchlistCount" doc:id="e08f1d38-2555-450b-8814-fcf1dcc75818" variableName="processedSheriffWatchlistCount"/>
+		<choice doc:name="Choice" doc:id="d9a89864-74d1-4b25-93d8-fcc8fd30a7a4" >
+			<when expression='#[vars.DailySheriffWatchlistExtractIsRunnable == "1"]'>
+				<flow-ref doc:name="get_TimeStamp_Sub_Flow" doc:id="790271ee-dfb0-40f1-8b72-1c6b03837f41" name="get_TimeStamp_Sub_Flow"/>
+				<flow-ref doc:name="Report_1_Sub_Flow" doc:id="c43d4f26-b2b8-4f5a-885a-5151daf602d1" name="Report_1_Sub_Flow"/>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="46ece02e-342e-4a6d-b776-048d8a8e73ef" message="Extract Sheriff Watchlist Daily - Not Runnable"/>
+			</otherwise>
+		</choice>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="dd865b80-4d97-479a-bc69-5ec5a64c1417" >
+				<flow-ref doc:name="sendEmail_Notification" doc:id="a68c83d7-440f-4b2c-8418-2a1a882f4351" name="sendEmail_Notification"/>
+				<logger level="ERROR" doc:name="Logger" doc:id="d2f962f6-aebd-4d50-bab4-2620cfb96888" message="Exception while creating sherrifwatch list data, email sent with error details"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<sub-flow name="get_TimeStamp_Sub_Flow" doc:id="abf916f4-b682-4414-a805-9f7fdac07531" >
+		<logger level="INFO" doc:name="Logger" doc:id="88f2c0d8-8e3f-4a61-8cd6-0e7064159b83" message="Extract Sheriff Watchlist Daily - Runnable" />
+		<logger level="INFO" doc:name="Version Info" doc:id="2a480fb1-3aad-4f30-90a1-f715fee68882" message="#['${version.info}']" />
+		<db:select doc:name="Select" doc:id="8d2fa6ce-b60c-493c-a43f-0b8df4874710" config-ref="DB2_Config_OTS">
+					<reconnect />
+				<db:sql><![CDATA[SELECT CURRENT TIMESTAMP FROM sysibm.sysdummy1;]]></db:sql>
+				</db:select>
+		<logger level="INFO" doc:name="Logger" doc:id="47a04dd9-639d-4c6b-bb7a-75a526000e20" message="Fetched Timestamp from DB"/>
+		<set-variable value="#[payload[0].'1']" doc:name="Set currentRunTime" doc:id="9a3d168b-ba4f-4440-b901-8265c1aec438" variableName="currentRunTime" />
+		<set-variable value="${sftp.archive.dir}" doc:name="Set archiveDirectory" doc:id="d69af355-d633-4d96-ab62-6e8fa64ce297" variableName="archiveDirectory" />
+	</sub-flow>
+	<sub-flow name="Report_1_Sub_Flow" doc:id="dcd56082-d080-447d-9764-ca4691b6e285" >
+		<ee:transform doc:name="Transform Message" doc:id="331d85c0-017f-434e-81af-3b84f87ca3ec">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="sleep"><![CDATA[%dw 2.0
+import * from dw::Runtime
+output application/json
+---
+{ "user" : 1 } wait 5000
+]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<set-variable value='#[now() as String {format:"yyyyMMdd_HHmmssSSS"}]' doc:name="Set stringDate" doc:id="fc5c7a4d-cd34-44df-a3a0-1d12a3904d76" variableName="stringDate"/>
+		<set-variable value='#[vars.stringDate ++ "_CRIMS_SheriffWatchlist_Data.csv"]' doc:name="Set sftpfilename" doc:id="1ebe19b1-c9ed-45a5-95aa-13b9aa716d27" variableName="sftpfilename"/>
+		<db:select doc:name="Select" doc:id="9b4213c3-9b03-42c9-8928-68e530232342" config-ref="DB2_Config_OTS">
+			<db:sql><![CDATA[SELECT
+ PER.I_PFN AS PFN
+ ,AKA.N_NAME_LAST AS LNAME
+ ,AKA.N_NAME_FIRST AS FNAME
+ ,AKA.N_NAME_MIDDLE AS MNAME 
+ ,CHAR(DOB.BIRTH_DATE,ISO) AS DOB
+ ,WAR.I_CEN AS CEN 
+ ,'' AS CASE_NUMBER
+ ,WAR.I_WRNT_NUM_UNFLIP AS WARRANT
+ ,WAR.C_CD_VIOL1 AS CHARGE_CODE
+ ,WAR.N_SECT_VIOL1 AS CHARGE_SECTION
+ ,WAR.C_WRNT_RSN AS TYPE
+ ,CHAR(WAR.D_CNTL_DATE,ISO) AS WARRANT_CTL_DATE
+ ,'' AS BOOK_DATE
+ ,'' AS RELEASE_DATE
+ ,'' AS RELEASE_REASON
+,'1' AS SOURCE_TYPE
+FROM LEAOWN.AWS_WARRANT WAR
+ JOIN LEAOWN.AWS_PERSON PER
+ ON PER.I_PERSON_KEY = WAR.I_PERSON_KEY 
+ LEFT JOIN S1AOWN.S1VDEF0 DEF
+ ON DEF.PFN_X = PER.I_PFN
+ LEFT JOIN S1AOWN.S1VDOB0 DOB
+ ON DOB.PFN_X = DEF.PFN_X
+ AND DOB.DOB_OCC_NUM = DEF.DOB_PRIM_OCC_NUM 
+ LEFT JOIN LEAOWN.AWS_AKA_NAME AKA
+ ON AKA.I_PERSON_KEY = WAR.I_PERSON_KEY 
+ AND AKA.I_AKA_KEY = WAR.I_AKA_KEY 
+WHERE WAR.I_JDST_CD < '2000' 
+ AND WAR.C_CLASS_CD IN ('A') 
+ AND WAR.C_WRNT_RSN IN ('BW','OR','RA') 
+UNION
+SELECT
+ DAC.PFN_X AS PFN
+ ,NAM.DEFN_LAST_NAME AS LNAME
+ ,NAM.DEFN_FIRST_NAME AS FNAME 
+ ,NAM.DEFN_MIDDLE_NAME AS MNAME
+ ,CHAR(DOB.BIRTH_DATE,ISO) AS DOB 
+ ,EVA.EVENT_NUM AS CEN
+ ,CSE.CASE_NUMBER AS CASE_NUMBER
+ ,'' AS WARRANT
+ ,'' AS CHARGE_CODE
+ ,'' AS CHARGE_SECTION
+ ,'' AS TYPE
+ ,'' AS WARRANT_CTL_DATE
+ ,CHAR(EVA.BOOK_DATE,ISO) AS BOOK_DATE
+ ,CHAR(EVA.RELEASE_DATE,ISO) AS RELEASE_DATE
+  ,EVA.RELEASE_REASON_CD AS RELEASE_REASON
+ ,'2' AS SOURCE_TYPE
+FROM S1AOWN.S1VEVA0 EVA
+ JOIN S1AOWN.S1VDAC0 DAC
+ ON DAC.EVENT_NUM = EVA.EVENT_NUM
+ JOIN S1AOWN.S1VDEF0 DEF
+ ON DEF.PFN_X = DAC.PFN_X
+ JOIN S1AOWN.S1VNAM0 NAM
+ ON NAM.PFN_X = DEF.PFN_X
+ AND NAM.DEFN_NAME_API = DEF.DEFN_NAME_API 
+ LEFT JOIN S1AOWN.S1VDOB0 DOB
+ ON DOB.PFN_X = DEF.PFN_X
+ AND DOB.DOB_OCC_NUM = DEF.DOB_PRIM_OCC_NUM 
+ LEFT JOIN S2AOWN.S2VCSE0 CSE
+ ON CSE.EVENT_NUM = EVA.EVENT_NUM 
+WHERE EVA.RELEASE_DATE >= CURRENT DATE - 6 MONTHS
+ AND ((CSE.CASE_ID = (SELECT MAX(CSE2.CASE_ID) FROM S2AOWN.S2VCSE0 CSE2
+ WHERE CSE2.EVENT_NUM = EVA.EVENT_NUM
+ )
+ ) OR
+ (CSE.CASE_ID IS NULL) 
+ )
+ ORDER BY PFN;]]></db:sql>
+		</db:select>
+		<logger level="INFO" doc:name="Logger" doc:id="b92aefcf-985a-487f-8b3d-b8b010d8fff0" message="Fetched sherrifwatchlist data from DB"/>
+		<ee:transform doc:name="Transform Message" doc:id="347dd82f-48a0-49f9-8c2e-9c4ade807c0d" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/csv header=true, separator=','
+---
+payload map {
+	
+	PFN: $.PFN,
+	LNAME: $.LNAME,
+	FNAME: $.FNAME,
+	MNAME: $.MNAME,
+	DOB: $.DOB,
+	CEN: $.CEN,
+	CASE_NUMBER: $.CASE_NUMBER,
+	WARRANT: $.WARRANT,
+	CHARGE_CODE: $.CHARGE_CODE,
+	CHARGE_SECTION: $.CHARGE_SECTION,
+	TYPE: $.TYPE,
+	WARRANT_CTL_DATE: $.WARRANT_CTL_DATE,
+	BOOK_DATE: $.BOOK_DATE,
+	RELEASE_DATE: $.RELEASE_DATE,
+	RELEASE_REASON: $.RELEASE_REASON,
+	SOURCE_TYPE: $.SOURCE_TYPE
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<flow-ref doc:name="saveFile_and_FTP_Sub_Flow" doc:id="a8da6cfe-408f-4b2a-ac0c-5b437a2790ff" name="saveFile_and_FTP_Sub_Flow"/>
+	</sub-flow>
+	<sub-flow name="saveFile_and_FTP_Sub_Flow" doc:id="005aee6a-ad77-49fb-85a7-65deb8de35bf" >
+		<logger level="INFO" doc:name="Logger" doc:id="9568a715-96a7-4375-95af-0c358733a7ad" message="writing records to csv file"/>
+		<file:write doc:name="Write" doc:id="6ee9a9bf-b7ef-4497-a5e5-2dc3f886b872" path="#[vars.archiveDirectory ++ vars.sftpfilename]" />
+		<db:select doc:name="Select" doc:id="0da8de6b-ad47-41e7-bc20-6654eefcbca0" config-ref="DB2_Config_OTS" target="sftpPassword">
+			<reconnect />
+				<db:sql><![CDATA[SELECT VALUE FROM GAAOWN.GAVPRP1 WHERE NAME = :name]]></db:sql>
+			<db:input-parameters><![CDATA[#[{'name': 'mule_sheriffWatchlistData_sftp_password'}]]]></db:input-parameters>
+		</db:select>
+		<logger level="INFO" doc:name="Logger" doc:id="a8088445-04f9-42a1-b399-3a53b1bfd675" message="fetched SFTP password"/>
+		<set-variable value="#[output application/json --- vars.sftpPassword.Value[0]]" doc:name="Set Variable" doc:id="ec98b822-b450-4840-95b4-3031c891a03d" variableName="pswd"/>
+		<sftp:write doc:name="Write" doc:id="932321ca-f144-4947-9ebe-80c3f7f69572" path="#[vars.sftpfilename]" config-ref="SFTP_Config" lock="true">
+				<reconnect />
+			</sftp:write>
+		<logger level="INFO" doc:name="Logger" doc:id="577c9857-e671-4942-936c-e0c39239ad31" message="#[vars.sftpfilename ++ 'File created successfully']" />
+	</sub-flow>
+</mule>

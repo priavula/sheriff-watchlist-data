@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:email="http://www.mulesoft.org/schema/mule/email"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	
+	<sub-flow name="sendEmail_Notification" doc:id="4166346b-7cb7-4374-a50b-35f475c99e4a" >
+		<ee:transform doc:name="Transform Message" doc:id="5c2577aa-1ad0-4eb9-93da-ecc6a1d9c4b2" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="emailBody" ><![CDATA[%dw 2.0
+output text/plain
+---
+
+"SherrifWatchList data report not generated error description :" ++ error.description default " "
+
+]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<email:send doc:name="Send Email" doc:id="8bbbe690-530b-4924-9e32-7bfa7cf58e3d" config-ref="ITD_SMTP" fromAddress="${email.from}" subject="SherrifWatchList data report not generated">
+			<email:to-addresses >
+				<email:to-address value="${email.to}" />
+			</email:to-addresses>
+			<email:body contentType="text/plain" encoding="UTF-8">
+				<email:content><![CDATA[#[vars.emailBody]]]></email:content>
+			</email:body>
+		</email:send>
+		<!-- <email:send doc:name="Send" doc:id="4e340bd4-0496-4680-b839-b78344e7335c" config-ref="Email_SMTP" fromAddress="${smtp.from}" subject="SherrifWatchList data report not generated ">
+			<email:to-addresses >
+				<email:to-address value="${smtp.to}" />
+			</email:to-addresses>
+			<email:body contentType="text/plain" encoding="UTF-8">
+				<email:content ><![CDATA[#[vars.emailBody]]]></email:content>
+			</email:body>
+		</email:send> -->
+	</sub-flow>
+</mule>
